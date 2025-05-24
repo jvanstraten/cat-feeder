@@ -329,9 +329,15 @@ private:
     float feed_bowl_pre = 0.0f;
 
     /**
-     * Weight in grams of bowl after feeding cycle.
+     * Weight in grams of bowl after feeding cycle. Only used if
+     * feed_bowl_post_valid is set, because of high cat interference potential.
      */
     float feed_bowl_post = 0.0f;
+
+    /**
+     * Whether the post-measurement for the bowl is valid.
+     */
+    bool feed_bowl_post_valid = false;
 
     /**
      * Information about the most recent feed attempt.
@@ -359,7 +365,7 @@ private:
      * Wait this amount of time after the motor run before doing the
      * post-feed load cell measurements.
      */
-    static constexpr unsigned long FEED_TO_MEASURE_MILLIS = 3000;
+    static constexpr unsigned long FEED_TO_MEASURE_MILLIS = 800;
 
     /**
      * Minimum time between feed attempts.
@@ -373,7 +379,7 @@ private:
      * Assumed weight in grams for a feeding cycle if the sensor values aren't
      * reasonable.
      */
-    static constexpr float FEED_ASSUMED_WEIGHT_GRAMS = 10.0f;
+    static constexpr float FEED_ASSUMED_WEIGHT_GRAMS = 9.0f;
 
     /**
      * Maximum disagreement between sensors.

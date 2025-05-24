@@ -100,17 +100,38 @@ float StateMachine::estimate_dispensed_weight_grams() {
     float dispensed_reservoir = feed_reservoir_pre - feed_reservoir_post;
     float dispensed_bowl = feed_bowl_post - feed_bowl_pre;
 
-    // If the sensors disagree by too much, fail.
-    if (abs(dispensed_reservoir - dispensed_bowl) > FEED_MAX_DISAGREE_GRAMS) {
-        error_loadcell_disagree = true;
-        return FEED_ASSUMED_WEIGHT_GRAMS;
-    }
-    float dispensed = (dispensed_reservoir + dispensed_bowl) / 2.0f;
+    // Check for sensor agreement.
+    float dispensed;
+    if (feed_bowl_post_valid) {
 
-    // Check reasonableness.
-    if (dispensed < -2.0f || dispensed > FEED_ASSUMED_WEIGHT_GRAMS * 3.0f) {
-        error_loadcell_unreasonable = true;
-        return FEED_ASSUMED_WEIGHT_GRAMS;
+        // If the sensors disagree by too much, fail.
+        if (abs(dispensed_reservoir - dispensed_bowl) > FEED_MAX_DISAGREE_GRAMS) {
+            error_loadcell_disagree = true;
+            return FEED_ASSUMED_WEIGHT_GRAMS;
+        }
+        dispensed = (dispensed_reservoir + dispensed_bowl) / 2.0f;
+
+        // Check reasonableness.
+        if (dispensed < -2.0f || dispensed > FEED_ASSUMED_WEIGHT_GRAMS * 2.0f) {
+            error_loadcell_unreasonable = true;
+            return FEED_ASSUMED_WEIGHT_GRAMS;
+        }
+
+    } else {
+
+        // Post-measurement for the bowl is too noisy, presumably because cat.
+        // Just fall back to a single measurement,
+        dispensed = dispensed_reservoir;
+
+        // Perform a tighter reasonableness check in this case though.
+        // Dispensed amount for current kibble varies between 7 and 11 grams,
+        // which is about +/-25%; give a bit more tolerance to avoid nuisance
+        // errors.
+        if (dispensed < FEED_ASSUMED_WEIGHT_GRAMS * 0.5f || dispensed > FEED_ASSUMED_WEIGHT_GRAMS * 1.5f) {
+            error_loadcell_unreasonable = true;
+            return FEED_ASSUMED_WEIGHT_GRAMS;
+        }
+
     }
 
     return dispensed;
@@ -337,10 +358,10 @@ void StateMachine::update() {
                     transition(State::IDLE);
                     break;
                 }
+                error_reservoir_stddev = true;
             }
 
             // Limp mode.
-            error_reservoir_stddev = true;
             transition(State::FEED_PRE_MEASURE_BOWL);
             break;
 
@@ -367,10 +388,10 @@ void StateMachine::update() {
                     transition(State::IDLE);
                     break;
                 }
+                error_bowl_stddev = true;
             }
 
             // Limp mode.
-            error_bowl_stddev = true;
             transition(State::FEED_RUN_SYNC);
             break;
 
@@ -444,19 +465,13 @@ void StateMachine::update() {
                 if (!handle_loadcell_readout()) {
                     break;
                 }
-                if (loadcell.get_stddev() < 1.0) {
-                    feed_bowl_post = loadcell.get_mean();
-                    transition(State::FEED_POST_MEASURE_RESERVOIR);
-                    break;
-                }
-                if (state_retries < 5) {
-                    transition(state);
-                    break;
-                }
+                feed_bowl_post = loadcell.get_mean();
+                feed_bowl_post_valid = loadcell.get_stddev() < 1.0;
+            } else {
+                feed_bowl_post_valid = false;
             }
 
             // Limp mode.
-            error_bowl_stddev = true;
             transition(State::FEED_POST_MEASURE_RESERVOIR);
             break;
 
@@ -474,10 +489,10 @@ void StateMachine::update() {
                     transition(state);
                     break;
                 }
+                error_reservoir_stddev = true;
             }
 
             // Limp mode.
-            error_reservoir_stddev = true;
             complete_feed();
             break;
     }
